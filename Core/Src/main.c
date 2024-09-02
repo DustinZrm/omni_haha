@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <math.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -35,8 +36,6 @@
 #define VY_VALUE           (sqrt(3)/2.f)
 #define L_value            (20*0.01f)
 #define RADIUS_value       (1.0/12.5*0.01f)
-
-#define start_rate 1
 
 #define MAX_MOTOR_SPEED 100
 
@@ -82,9 +81,9 @@ UART_HandleTypeDef huart3;
 double current_motor_one = 0, current_motor_two = 0, current_motor_there = 0;
 double target_motor_one = 0, target_motor_two = 0, target_motor_there = 0;
 uint8_t omniflag = 1;
-uint8_t ble_rx_data; //
-int omni = 0; //omni status flag (0: off, 1: on)
-double speed = 30;//default speed of the car
+uint8_t bt_rx_data;
+int omni = 0; // omni status flag (0: off, 1: on)
+double speed = 30; // default speed of the car
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -156,21 +155,7 @@ void SpeedControl(float ay, float ax, float vz) {
 }
 
 void updateMotorSpeed() {
-    if (current_motor_one < target_motor_one) {
-        current_motor_one += start_rate;
-    } else if (current_motor_one > target_motor_one) {
-        current_motor_one -= start_rate;
-    }
-    if (current_motor_two < target_motor_two) {
-        current_motor_two += start_rate;
-    } else if (current_motor_two > target_motor_two) {
-        current_motor_two -= start_rate;
-    }
-    if (current_motor_there < target_motor_there) {
-        current_motor_there += start_rate;
-    } else if (current_motor_there > target_motor_there) {
-        current_motor_there -= start_rate;
-    }
+    // 更新电机PWM
     setWheelSpeed(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, current_motor_one);
     setWheelSpeed(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, current_motor_two);
     setWheelSpeed(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, current_motor_there);
@@ -242,8 +227,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2) // 确保是正确的UART实例
     {
-        handleCommand(ble_rx_data); // 处理接收到的数据
-        HAL_UART_Receive_IT(&huart2, &ble_rx_data, 1); // 重新启动中断接收
+        handleCommand(bt_rx_data); // 处理接收到的数据
+        HAL_UART_Receive_IT(&huart2, &bt_rx_data, 1); // 重新启动中断接收
     }
 }
 /* USER CODE END 0 */
@@ -672,7 +657,7 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
-    HAL_UART_Receive_IT(&huart2, &ble_rx_data, 1);
+    HAL_UART_Receive_IT(&huart2, &bt_rx_data, 1);
   /* USER CODE END USART2_Init 2 */
 
 }
