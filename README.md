@@ -1,4 +1,9 @@
 # 哈哈机器人底盘驱动系统
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DustinZrm/omni_haha/build.yml)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/DustinZrm/omni_haha)
+![GitHub last commit](https://img.shields.io/github/last-commit/DustinZrm/omni_haha)
+![GitHub repo size](https://img.shields.io/github/repo-size/DustinZrm/omni_haha)
+![GitHub](https://img.shields.io/github/license/DustinZrm/omni_haha)
 
 ## 系统概述
 
