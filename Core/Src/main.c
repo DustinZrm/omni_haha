@@ -37,8 +37,6 @@
 #define L_value            (20*0.01f)
 #define RADIUS_value       (1.0/12.5*0.01f)
 
-#define MAX_MOTOR_SPEED 100
-
 #define CMD_FORWARD 'A'
 #define CMD_BACKWARD 'E'
 #define CMD_LEFT 'C'
@@ -84,6 +82,9 @@ uint8_t omniflag = 1;
 uint8_t bt_rx_data;
 int omni = 0; // omni status flag (0: off, 1: on)
 double speed = 30; // default speed of the car
+double ramp_time = 0; // time to reach full speed
+double start_time = 0; // start time of the ramp
+double ramp_increment = 0.1; // speed increment per time step
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,13 +104,8 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-double limitWheelSpeed(double wheelSpeed) {
-    if(wheelSpeed > MAX_MOTOR_SPEED) return MAX_MOTOR_SPEED;
-    if(wheelSpeed < -MAX_MOTOR_SPEED) return -MAX_MOTOR_SPEED;
-    return wheelSpeed;
-}
 
-void setWheelSpeed(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* htim, uint32_t Channel, double wheelSpeed) {
+void setPWM(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* htim, uint32_t Channel, double wheelSpeed) {
     // 这里还需把轮子速度换算成电机速度，首先需要知道轮子的半径，已经在宏定义中定义了，然后根据轮子的半径和电机的速度之间的关系，可以得到电机的速度
     // 这里的轮子速度指的是在该轮子方向矢量上的速度，而电机速度指的是电机的速度
     // 电机速度 = 轮子速度（线速度） / 轮子半径
@@ -133,65 +129,76 @@ void setWheelSpeed(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* ht
     }
 }
 
-void SpeedControl(float ay, float ax, float vz) {
-//    if(vx == 0 && ax == 0 && vz == 0) {
-//        // set ST to low to stop the motor
-//        HAL_GPIO_WritePin(ST_GPIO_Port, ST_Pin, GPIO_PIN_RESET);
-//    }
-//    else {
-//        // set ST to high to start the motor
-//        HAL_GPIO_WritePin(ST_GPIO_Port, ST_Pin, GPIO_PIN_SET);
-//    }
+void vectorControl(float ay, float ax, float vz) {
     ax = -ax;
     ay = -ay;
     vz = -vz;
     //vz *= 3.14;
-    target_motor_one = limitWheelSpeed(ay + L_value * vz);
-    target_motor_two = limitWheelSpeed(-VX_VALUE * ay - VY_VALUE * ax + L_value * vz);
-    target_motor_there = limitWheelSpeed(-VX_VALUE * ay + VY_VALUE * ax + L_value * vz);
-//    setMotorSpeed(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, motor_one);
-//    setMotorSpeed(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, motor_two);
-//    setMotorSpeed(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, motor_there);
+    target_motor_one = (ay + L_value * vz);
+    target_motor_two = (-VX_VALUE * ay - VY_VALUE * ax + L_value * vz);
+    target_motor_there = (-VX_VALUE * ay + VY_VALUE * ax + L_value * vz);
 }
 
-void updateMotorSpeed() {
+void speedUpdate() {
+    static uint32_t last_update_time = 0;
+    uint32_t current_time = HAL_GetTick();
+    double dt = (current_time - last_update_time) / 1000.0; // time difference in seconds
+    last_update_time = current_time;
+
+    if (ramp_time == 0) {
+        ramp_time = 2; // Set the ramp time to 3 seconds
+        start_time = HAL_GetTick();
+    }
+
+    double elapsed_time = (current_time - start_time) / 1000.0; // time elapsed in seconds
+
+    if (elapsed_time < ramp_time) {
+        speed = (elapsed_time / ramp_time) * 30; // Linearly interpolate the speed
+    } else {
+        speed = 30;
+    }
+
+    // Update motor speeds
+    current_motor_one = target_motor_one * speed;
+    current_motor_two = target_motor_two * speed;
+    current_motor_there = target_motor_there * speed;
     // 更新电机PWM
-    setWheelSpeed(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, current_motor_one);
-    setWheelSpeed(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, current_motor_two);
-    setWheelSpeed(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, current_motor_there);
-    HAL_Delay(3);
+    setPWM(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, current_motor_one);
+    setPWM(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, current_motor_two);
+    setPWM(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, current_motor_there);
+    //HAL_Delay(3);
 }
 
-void handleCommand(uint8_t cmd) {
+void blControl(uint8_t cmd) {
     switch (cmd) {
         case CMD_FORWARD:
-            SpeedControl(0, speed, 0);
+            vectorControl(0, speed, 0);
             break;
         case CMD_BACKWARD:
-            SpeedControl(0, -speed, 0);
+            vectorControl(0, -speed, 0);
             break;
         case CMD_LEFT:
-            if (omniflag)SpeedControl(speed, 0, 0); //turn left
-            else SpeedControl(0, 0, speed); // counterclockwise
+            if (omniflag)vectorControl(speed, 0, 0); //turn left
+            else vectorControl(0, 0, speed); // counterclockwise
             break;
         case CMD_RIGHT:
-            if (omniflag)SpeedControl(-speed, 0, 0); // turn right
-            else SpeedControl(0, 0, -speed); // clockwise
+            if (omniflag)vectorControl(-speed, 0, 0); // turn right
+            else vectorControl(0, 0, -speed); // clockwise
             break;
         case CMD_Q:
-            if (omniflag)SpeedControl(-speed, speed, 0); // forward right
+            if (omniflag)vectorControl(-speed, speed, 0); // forward right
             break;
         case CMD_E:
-            if (omniflag)SpeedControl(speed, speed, 0);
+            if (omniflag)vectorControl(speed, speed, 0);
             break;
         case CMD_C:
-            if (omniflag)SpeedControl(speed, -speed, 0);
+            if (omniflag)vectorControl(speed, -speed, 0);
             break;
         case CMD_Z:
-            if (omniflag)SpeedControl(-speed, -speed, 0);
+            if (omniflag)vectorControl(-speed, -speed, 0);
             break;
         case CMD_STOP:
-            SpeedControl(0, 0, 0);//stop
+            vectorControl(0, 0, 0);//stop
             break;
         case CMD_SPEED_UP:
             speed += 10;
@@ -206,28 +213,12 @@ void handleCommand(uint8_t cmd) {
             break;
     }
 }
-void test(){
-    SpeedControl(0, 20, 0);
-    HAL_Delay(1000);
-    SpeedControl(0, -20, 0);
-    HAL_Delay(1000);
-    SpeedControl(20, 0, 0);
-    HAL_Delay(1000);
-    SpeedControl(-20, 0, 0);
-    HAL_Delay(1000);
-    SpeedControl(0, 0, 20);
-    HAL_Delay(1000);
-    SpeedControl(0, 0, -20);
-    HAL_Delay(1000);
-    SpeedControl(0, 0, 0);
-    HAL_Delay(5000);
-}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2) // 确保是正确的UART实例
     {
-        handleCommand(bt_rx_data); // 处理接收到的数据
+        blControl(bt_rx_data); // 处理接收到的数据
         HAL_UART_Receive_IT(&huart2, &bt_rx_data, 1); // 重新启动中断接收
     }
 }
@@ -276,7 +267,7 @@ int main(void)
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);//A����ٶ�
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);//B����ٶ�
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);//C����ٶ�
-    SpeedControl(0, 0, 0);
+    vectorControl(0, 0, 0);
     //����LED��
     HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
     HAL_Delay(500);
@@ -298,7 +289,7 @@ int main(void)
             HAL_Delay(300);//消抖
         }
         //小车往前走
-        updateMotorSpeed();
+        speedUpdate();
         // uartctl();
     /* USER CODE END WHILE */
 
