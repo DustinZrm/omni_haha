@@ -25,4 +25,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stm32-firmware
-          path: ${{github.workspace}}/build/*.elf
+          path: ${{github.workspace}}/build/*
