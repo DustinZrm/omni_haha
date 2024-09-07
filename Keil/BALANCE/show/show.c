@@ -105,11 +105,11 @@ void oled_show1(void)
 		                      OLED_ShowNumber(90,40, Position_C,6,12);
 	}
 		//=============第6行显示模式和电压=======================//
-		if(Run_Flag==0)       OLED_ShowString(00,50,"VEC");
-	else	if(Run_Flag==1)   OLED_ShowString(00,50,"POS");
+		if(ST)       OLED_ShowString(30,50," RUN");
+	else OLED_ShowString(30,50,"STOP");
 													
-	if(Usart_ON_Flag) OLED_ShowString(30,50,"ROS");
-	else OLED_ShowString(30,50,"APP");
+	if(Usart_ON_Flag) OLED_ShowString(00,50,"ROS");
+	else OLED_ShowString(00,50,"APP");
 		                      OLED_ShowString(88,50,".");
 		                      OLED_ShowString(110,50,"V");
 		                      OLED_ShowNumber(75,50,Voltage/100,2,12);

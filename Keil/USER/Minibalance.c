@@ -49,6 +49,7 @@ int main(void)
 				Flash_Send=0;	
 			}	
 			APP_Show();
+			USART3_SEND();
 	    if(Flag_Show==0)oled_show1();             //===ÏÔÊ¾ÆÁ´ò¿ª
 			else oled_show2();
 			delay_flag=1;	

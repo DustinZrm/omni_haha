@@ -307,7 +307,7 @@ u8 Check_Sum(unsigned char Count_Number,unsigned char Mode)
 	if(Mode==1)
 	for(k=0;k<Count_Number;k++)
 	{
-	check_sum=check_sum^txbuf[k];
+	check_sum=check_sum^txbuf2[k];
 	}
 	
 	//对接收到的数据进行校验
@@ -337,7 +337,7 @@ float XYZ_Target_Speed_transition(u8 High,u8 Low)
 	//The high 8 and low 8 bits are integrated into a 16-bit short data
 	transition=((High<<8)+Low); 
 	return 
-		transition/1000+(transition%1000)*0.001; //Unit conversion, mm/s->m/s //单位转换, mm/s->m/s						
+		transition; //Unit conversion, mm/s->m/s //单位转换, mm/s->m/s						
 }
 
 
@@ -352,12 +352,70 @@ void CAN_N_Usart_Control(void)
 		if (rxbuf[9] == Check_Sum(9,0)||1){
 			//Usart_ON_Flag=0;
 			//从串口数据求三轴目标速度， 单位m/s
-			Move_Y=-XYZ_Target_Speed_transition(rxbuf[3],rxbuf[4])*4000;
-			Move_X=-XYZ_Target_Speed_transition(rxbuf[5],rxbuf[6])*4000;
-			Move_Z=-XYZ_Target_Speed_transition(rxbuf[7],rxbuf[8])*780;
+			Move_Y=-XYZ_Target_Speed_transition(rxbuf[3],rxbuf[4])*4;
+			Move_X=-XYZ_Target_Speed_transition(rxbuf[5],rxbuf[6])*4;
+			Move_Z=-XYZ_Target_Speed_transition(rxbuf[7],rxbuf[8])*0.780;
 			Kinematic_Analysis(Move_X,Move_Y,Move_Z),Gyro_K=0;    //进行运动学分析
 		}
 	}
+}
+
+void data_transition(void){
+	short X_speed,Y_speed,Z_speed;
+	txbuf2[0]=0x7b;		//包头
+	txbuf2[1]=!ST;			//失能标志位
+	
+  X_speed = (short)(-Move_Y / 4);
+  Y_speed = (short)(-Move_X / 4);
+  Z_speed = (short)(-Move_Z / 0.780);
+
+	txbuf2[2]=X_speed >>8; 
+	txbuf2[3]=X_speed;
+	txbuf2[4]=Y_speed >>8;
+	txbuf2[5]=Y_speed;
+	txbuf2[6]=Z_speed >>8;
+	txbuf2[7]=Z_speed;
+	
+	txbuf2[8]=accel[1] >>8; 
+	txbuf2[9]=accel[1]; 
+	txbuf2[10]=-accel[0] >>8; 
+	txbuf2[11]=-accel[0]; 
+	txbuf2[12]= accel[2] >>8; 
+	txbuf2[13]= accel[2]; 
+	
+	txbuf2[14]= gyro[1] >>8; 
+	txbuf2[15]= gyro[1]; 
+	txbuf2[16]=-gyro[0] >>8; 
+	txbuf2[17]=-gyro[0]; 
+	if(ST==1) {
+		//If the motor control bit makes energy state, the z-axis velocity is sent normall
+	  //如果电机控制位使能状态，那么正常发送Z轴角速度
+		txbuf2[18]=gyro[2] >>8;  
+		txbuf2[19]=gyro[2];  
+		
+	}
+	else  {
+		//If the robot is static (motor control dislocation), the z-axis is 0
+    //如果机器人是静止的（电机控制位失能），那么发送的Z轴角速度为0		
+		txbuf2[18]=0 >>8;  
+		txbuf2[19]=0;       
+	}
+	
+	txbuf2[20] = Voltage >>8;
+	txbuf2[21] = Voltage;
+	
+	txbuf2[22]=Check_Sum(22,1);
+	txbuf2[23]=0x7d;
+}
+
+void USART3_SEND(void)
+{
+  unsigned char i = 0;	
+	data_transition();
+	for(i=0; i<24; i++)
+	{
+		usart3_send(txbuf2[i]);
+	}	 
 }
 
 
