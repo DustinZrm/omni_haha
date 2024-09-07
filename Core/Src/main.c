@@ -32,9 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define VX_VALUE           (0.5f)
-#define VY_VALUE           (sqrt(3)/2.f)
-#define L_value            (20*0.01f)
+#define ParamentX           (0.5f)
+#define ParamentY           (sqrt(3)/2.f)
+#define ParamentZ            (20*0.01f)
 #define RADIUS_value       (1.0/12.5*0.01f)
 
 #define CMD_FORWARD 'A'
@@ -50,7 +50,7 @@
 #define CMD_SPEED_DOWN 'Y'
 #define CMD_OMNI 'L'
 
-#define PWM_FREQ_HZ 5000 // PWM frequency in Hz
+#define PWM_FREQ_HZ 2000 // PWM frequency in Hz
 #define PWM_PERIOD ((SystemCoreClock / PWM_FREQ_HZ) - 1) // PWM period in system clock counts
 
 #define WHEELS_RADIUS 60 // unit: mm
@@ -76,8 +76,8 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-double current_motor_one = 0, current_motor_two = 0, current_motor_there = 0;
-double target_motor_one = 0, target_motor_two = 0, target_motor_there = 0;
+double motorCurrentA = 0, motorCurrentB = 0, motorCurrentC = 0;
+double motorTargetA = 0, motorTargetB = 0, motorTargetC = 0;
 uint8_t omniflag = 1;
 uint8_t bt_rx_data;
 int omni = 0; // omni status flag (0: off, 1: on)
@@ -105,7 +105,7 @@ static void MX_USART1_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void setPWM(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* htim, uint32_t Channel, double wheelSpeed) {
+void driveWheel(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* htim, uint32_t Channel, double wheelSpeed) {
     // 这里还需把轮子速度换算成电机速度，首先需要知道轮子的半径，已经在宏定义中定义了，然后根据轮子的半径和电机的速度之间的关系，可以得到电机的速度
     // 这里的轮子速度指的是在该轮子方向矢量上的速度，而电机速度指的是电机的速度
     // 电机速度 = 轮子速度（线速度） / 轮子半径
@@ -129,14 +129,16 @@ void setPWM(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, TIM_HandleTypeDef* htim, uin
     }
 }
 
-void vectorControl(float ay, float ax, float vz) {
-    ax = -ax;
-    ay = -ay;
-    vz = -vz;
-    //vz *= 3.14;
-    target_motor_one = (ay + L_value * vz);
-    target_motor_two = (-VX_VALUE * ay - VY_VALUE * ax + L_value * vz);
-    target_motor_there = (-VX_VALUE * ay + VY_VALUE * ax + L_value * vz);
+void driveWheels() {
+    driveWheel(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, motorCurrentA);
+    driveWheel(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, motorCurrentB);
+    driveWheel(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, motorCurrentC);
+}
+
+void vectorControl(float vy, float vx, float vz) {
+    motorTargetA = +vy + vz * ParamentZ;
+    motorTargetB = -vx * ParamentX - vy * ParamentY + vz * ParamentZ;
+    motorTargetC = +vx * ParamentX - vy * ParamentY - vz * ParamentZ;
 }
 
 void speedUpdate() {
@@ -159,13 +161,11 @@ void speedUpdate() {
     }
 
     // Update motor speeds
-    current_motor_one = target_motor_one * speed;
-    current_motor_two = target_motor_two * speed;
-    current_motor_there = target_motor_there * speed;
+    motorCurrentA = motorTargetA * speed;
+    motorCurrentB = motorTargetB * speed;
+    motorCurrentC = motorTargetC * speed;
     // 更新电机PWM
-    setPWM(DA_GPIO_Port, DA_Pin, &htim1, TIM_CHANNEL_1, current_motor_one);
-    setPWM(DB_GPIO_Port, DB_Pin, &htim2, TIM_CHANNEL_1, current_motor_two);
-    setPWM(DC_GPIO_Port, DC_Pin, &htim3, TIM_CHANNEL_1, current_motor_there);
+    driveWheels();
     //HAL_Delay(3);
 }
 
